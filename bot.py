@@ -5,7 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 # توکن ربات از متغیر محیطی
-TOKEN = os.environ.get('BOT_TOKEN')
+TOKEN = os.environ.get('8460310173:AAFyZmIJ6Ek5JOD2hq5JOzH2q9-Qj9sr06s')
 
 if not TOKEN:
     logging.error("❌ BOT_TOKEN not found in environment variables!")
