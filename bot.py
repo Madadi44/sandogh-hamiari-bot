@@ -56,7 +56,8 @@ main_keyboard = [
 admin_keyboard = [
     ["📝 ثبت عضویت", "💳 پرداخت"],
     ["📋 لیست اعضا", "🔄 ویرایش اعضا"],
-    ["✅ تایید پرداخت", "ℹ️ راهنما"]
+    ["✅ تایید پرداخت", "🗑️ ریست کل اطلاعات"],
+    ["ℹ️ راهنما"]
 ]
 
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -102,10 +103,88 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_edit_menu(update, context)
     elif text == "✅ تایید پرداخت":
         await show_confirm_menu(update, context)
+    elif text == "🗑️ ریست کل اطلاعات":
+        await show_reset_confirmation(update, context)
     elif text == "ℹ️ راهنما":
         await show_help(update, context)
     elif user_id in registration_data:
         await process_registration(update, context)
+    elif context.user_data.get('waiting_for_reset_confirmation'):
+        await process_reset_confirmation(update, context)
+
+async def show_reset_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """نمایش تاییدیه برای ریست اطلاعات"""
+    if not await is_admin(update, context):
+        await update.message.reply_text("❌ فقط مدیران می‌توانند از این قابلیت استفاده کنند.")
+        return
+    
+    group_id = update.effective_chat.id
+    
+    # بررسی آیا داده‌ای برای ریست وجود دارد
+    if group_id not in data or not data[group_id]["members"]:
+        await update.message.reply_text("❌ هیچ داده‌ای برای ریست کردن وجود ندارد.")
+        return
+    
+    # نمایش اطلاعات فعلی
+    total_members = len(data[group_id]["members"])
+    total_paid = sum(1 for member in data[group_id]["members"].values() if member["paid"])
+    
+    confirmation_text = (
+        "⚠️ **هشدار: ریست کامل اطلاعات**\n\n"
+        f"📊 **وضعیت فعلی:**\n"
+        f"• تعداد اعضا: {total_members}\n"
+        f"• پرداخت شده: {total_paid}\n"
+        f"• در انتظار پرداخت: {total_members - total_paid}\n\n"
+        "❌ **این عمل تمام اطلاعات زیر را حذف می‌کند:**\n"
+        "• تمام اعضای ثبت‌نام شده\n"
+        "• وضعیت پرداخت‌ها\n"
+        "• تاریخچه قرعه‌کشی‌ها\n\n"
+        "🔁 **شروع دوره جدید از صفر**\n\n"
+        "برای تایید، لطفاً عبارت **\"تایید ریست\"** را تایپ کنید:"
+    )
+    
+    context.user_data['waiting_for_reset_confirmation'] = True
+    await update.message.reply_text(confirmation_text)
+
+async def process_reset_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """پردازش تاییدیه ریست"""
+    text = update.message.text
+    group_id = update.effective_chat.id
+    
+    if text.strip() == "تایید ریست":
+        # ریست داده‌ها
+        if group_id in data:
+            # ذخیره بکاپ قبل از ریست
+            backup_data = data[group_id].copy()
+            
+            # ریست کامل
+            data[group_id] = {"members": {}, "winners": [], "current_month": "1403-02"}
+            save_data()
+            
+            # پاک کردن وضعیت ثبت‌نام
+            for user_id in list(registration_data.keys()):
+                if registration_data[user_id].get("group_id") == group_id:
+                    del registration_data[user_id]
+            
+            context.user_data['waiting_for_reset_confirmation'] = False
+            
+            success_text = (
+                "✅ **ریست کامل اطلاعات انجام شد!**\n\n"
+                "🗑️ تمام اطلاعات قبلی حذف شد.\n"
+                "🔄 دوره جدید شروع شد.\n\n"
+                "📝 اعضا می‌توانند از نو ثبت‌نام کنند."
+            )
+            await update.message.reply_text(success_text)
+            
+            # اطلاع‌رسانی به گروه
+            announcement = "🔄 **شروع دوره جدید**\n\n📝 لطفاً برای دوره جدید ثبت‌نام کنید."
+            await update.message.reply_text(announcement)
+            
+        else:
+            await update.message.reply_text("❌ هیچ داده‌ای برای ریست کردن وجود ندارد.")
+    else:
+        await update.message.reply_text("❌ ریست لغو شد. برای تایید باید عبارت \"تایید ریست\" را تایپ کنید.")
+        context.user_data['waiting_for_reset_confirmation'] = False
 
 async def start_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """شروع ثبت نام"""
@@ -307,6 +386,7 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📋 **لیست اعضا** - مشاهده وضعیت پرداخت همه اعضا
 🔄 **ویرایش اعضا** - مدیریت اعضای ثبت شده
 ✅ **تایید پرداخت** - فقط برای مدیران گروه
+🗑️ **ریست کل اطلاعات** - شروع دوره جدید (فقط مدیران)
 
 💡 **نکته:** برای استفاده، روی دکمه‌های منو کلیک کنید.
     """
